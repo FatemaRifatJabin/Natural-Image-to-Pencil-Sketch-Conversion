@@ -3,3 +3,7 @@ requests
 supabase
 numpy
 pillow
+fastapi
+uvicorn
+opencv-python-headless
+python-multipart
