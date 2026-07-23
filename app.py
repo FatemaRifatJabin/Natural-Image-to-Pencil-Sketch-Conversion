@@ -9,8 +9,8 @@ from supabase import create_client
 # ---------------------------------------------------------
 RENDER_API_URL = "https://natural-image-to-pencil-sketch-conversion.onrender.com/convert"
 
-# Supabase Credentials (আপনার Supabase Credentials দিন)
-SUPABASE_URL = "https://zkrtqljygfvjlwhxakwq.supabase.co/rest/v1/"
+# Supabase Credentials (সঠিক URL এবং Key)
+SUPABASE_URL = "https://zkrtqljygfvjlwhxakwq.supabase.co"
 SUPABASE_KEY = "sb_publishable_UpAp9JsR6W3q4NQ2pIpDxg_X7F0XMW3"
 
 try:
