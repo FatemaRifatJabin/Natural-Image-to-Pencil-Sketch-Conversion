@@ -10,8 +10,8 @@ from supabase import create_client
 RENDER_API_URL = "https://natural-image-to-pencil-sketch-conversion.onrender.com/convert"
 
 # Supabase Credentials (আপনার Supabase Credentials দিন)
-SUPABASE_URL = "https://oxjosxaexmoteqithguc.supabase.co"
-SUPABASE_KEY = "YOUR_SUPABASE_ANON_KEY"
+SUPABASE_URL = "https://zkrtqljygfvjlwhxakwq.supabase.co/rest/v1/"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InprcnRxbGp5Z2Z2amx3aHhha3dxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4MjQ2OTUsImV4cCI6MjEwMDQwMDY5NX0.h9Nr261YNi-FbbEckF-J6VVl_RjkD-MW5dychqr73nE"
 
 try:
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
