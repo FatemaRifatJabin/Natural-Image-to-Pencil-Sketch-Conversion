@@ -101,10 +101,14 @@ if uploaded_file is not None:
             try:
                 # Supabase Upload (Input Image)
                 if supabase:
-                        try:
-                            res = supabase.storage.from_("images").upload(f"inputs/{file_name}", file_bytes, {"x-upsert": "true"})
-                        except Exception as e:
-                            st.sidebar.error(f"Supabase Input Upload Error: {e}")
+                            try:
+                                supabase.storage.from_("images").upload(
+                                f"inputs/{file_name}", 
+                                file_bytes, 
+                                {"x-upsert": "true", "content-type": "image/png"}
+                                )
+                            except Exception as e:
+                                    pass
 
                 # API Data Payload
                 files = {"file": (file_name, file_bytes, "image/png")}
@@ -124,10 +128,14 @@ if uploaded_file is not None:
 
                     # Supabase Upload (Output Image)
                     if supabase:
-                             try:
-                                 res = supabase.storage.from_("images").upload(f"outputs/sketch_{file_name}", sketch_bytes, {"x-upsert": "true"})
-                             except Exception as e:
-                                 st.sidebar.error(f"Supabase Output Upload Error: {e}")
+                                try:
+                                    supabase.storage.from_("images").upload(
+                                    f"outputs/sketch_{file_name}", 
+                                    sketch_bytes, 
+                                    {"x-upsert": "true", "content-type": "image/png"}
+                                        )
+                                except Exception as e:
+                                    pass
 
                     # Display Output Sketch
                     st.image(sketch_bytes, use_container_width=True)
