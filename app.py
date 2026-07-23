@@ -1,26 +1,42 @@
 import streamlit as st
-import cv2
 import numpy as np
-from PIL import Image, ExifTags  # ExifTags অ্যাড করা হয়েছে
+from PIL import Image, ExifTags
 import io
+import requests
+from supabase import create_client
 
-# ১. পেজ কনফিগারেশন
+# ---------------------------------------------------------
+# ১. ক্লাউড কনফিগারেশন (Cloud Credentials)
+# ---------------------------------------------------------
+# Render Backend API URL (এখানে URL বসানো হয়েছে)
+RENDER_API_URL = "https://natural-image-to-pencil-sketch-conversion.onrender.com/convert"
+
+# Supabase Credentials (আপনার Supabase Dashboard থেকে সংগৃহীত URL & Anon Key বসাবেন)
+SUPABASE_URL = "https://zkrtqljygfvjlwhxakwq.supabase.co/rest/v1/"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InprcnRxbGp5Z2Z2amx3aHhha3dxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4MjQ2OTUsImV4cCI6MjEwMDQwMDY5NX0.h9Nr261YNi-FbbEckF-J6VVl_RjkD-MW5dychqr73nE"
+
+# Supabase Client তৈরি
+try:
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+except Exception as e:
+    supabase = None
+
+# ---------------------------------------------------------
+# ২. পেজ কনফিগারেশন
+# ---------------------------------------------------------
 st.set_page_config(page_title="Pencil Sketch Converter", page_icon="✏️", layout="centered")
 
 st.title("✏️ Natural Image to Pencil Sketch Converter")
-st.write("Upload an image to convert it into a pencil sketch.")
+st.write("Upload an image to store it in **Supabase Cloud** and process via **Render Cloud API**.")
 
-# --- ছবি সোজা করার জন্য প্রয়োজনীয় নতুন ফাংশন ---
+# ---------------------------------------------------------
+# ৩. ছবি সোজা করার ফাংশন (Image Orientation)
+# ---------------------------------------------------------
 def rotate_image_if_needed(image_pil):
-    """
-    ছবির EXIF ডাটা ব্যবহার করে ওরিয়েন্টেশন সঠিক করে।
-    """
     try:
-        # ছবির EXIF ডাটা খোঁজা
         if hasattr(image_pil, '_getexif'):
             exif = image_pil._getexif()
             if exif is not None:
-                # ওরিয়েন্টেশন ট্যাগ খোঁজা
                 for orientation in ExifTags.TAGS.keys():
                     if ExifTags.TAGS[orientation] == 'Orientation':
                         break
@@ -28,7 +44,6 @@ def rotate_image_if_needed(image_pil):
                 exif = dict(exif.items())
                 orientation_value = exif.get(orientation)
                 
-                # ওরিয়েন্টেশন অনুযায়ী ছবি ঘোরানো
                 if orientation_value == 3:
                     image_pil = image_pil.rotate(180, expand=True)
                 elif orientation_value == 6:
@@ -36,74 +51,71 @@ def rotate_image_if_needed(image_pil):
                 elif orientation_value == 8:
                     image_pil = image_pil.rotate(90, expand=True)
     except (AttributeError, KeyError, IndexError, ValueError):
-        # EXIF ডাটা না থাকলে বা কোনো এরর হলে, ছবিটি যেমন আছে তেমনই থাকবে
         pass
         
     return image_pil
-# ---------------------------------------------
 
-# ২. মডিফাইড ইমেজ প্রসেসিং ফাংশন
-def convert_to_sketch(image_np, blur_ksize, scale_val):
-    # গ্রেস্কেল কনভার্সন
-    # Pillow থেকে OpenCV-তে আসার সময় RGB থেকে BGR কনভার্ট করা লাগতে পারে
-    img_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
-    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
-    
-    # ইনভার্ট করা
-    inverted = cv2.bitwise_not(gray)
-    
-    # গসিয়ান ব্লার (ব্লার সাইজ অবশ্যই বিজোড় সংখ্যা হতে হবে)
-    # জিরো বা নেগেটিভ ভ্যালু যেন না হয় তার জন্য চেক
-    blur_ksize = max(1, blur_ksize if blur_ksize % 2 != 0 else blur_ksize + 1)
-    blurred = cv2.GaussianBlur(inverted, (blur_ksize, blur_ksize), sigmaX=0, sigmaY=0)
-    
-    # কালার ডজ ব্লেন্ডিং
-    sketch = cv2.divide(gray, 255 - blurred, scale=scale_val)
-    return sketch
-
-# ৩. কন্ট্রোল স্লাইডার (ঐচ্ছিক, আপনার আগের কোড থেকে রাখা হয়েছে)
-st.sidebar.header("🎨 Sketch Settings")
-blur_kernel = st.sidebar.slider("Blur Intensity (Gaussian Kernel)", min_value=3, max_value=51, value=21, step=2)
-scale_factor = st.sidebar.slider("Sketch Brightness/Scale", min_value=100.0, max_value=300.0, value=256.0, step=10.0)
-
-# ৪. ফাইল আপলোড অপশন
+# ---------------------------------------------------------
+# ৪. ফাইল আপলোড ও প্রসেসিং
+# ---------------------------------------------------------
 uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
-    # ফাইল থেকে ছবি ওপেন করা (Pillow লাইব্রেরি দিয়ে)
+    # ফাইল পড়া ও ওরিয়েন্টেশন সোজা করা
     image = Image.open(uploaded_file)
+    image = rotate_image_if_needed(image)
     
-    # --- ছবির ওরিয়েন্টেশন ঠিক করা (নতুন ধাপ) ---
-    with st.spinner("Correcting image orientation..."):
-        image = rotate_image_if_needed(image)
-    # ----------------------------------------
-    
-    img_np = np.array(image)
-    
-    # ২ টি কলামে অরিজিনাল ও স্কেচ ছবি দেখানো
+    # ছবি বাইটে রূপান্তর করা (API & Cloud Upload এর জন্য)
+    img_byte_arr = io.BytesIO()
+    image.save(img_byte_arr, format='PNG')
+    file_bytes = img_byte_arr.getvalue()
+    file_name = uploaded_file.name
+
     col1, col2 = st.columns(2)
     
     with col1:
         st.subheader("Original Image")
-        # ছবির ওরিয়েন্টেশন সোজা হওয়ার পর এটি দেখানো হবে
-        st.image(image, width='stretch')
+        st.image(image, use_column_width=True)
         
     with col2:
         st.subheader("Pencil Sketch")
-        # প্রসেস করা
-        with st.spinner("Processing image..."):
-            sketch_result = convert_to_sketch(img_np, blur_kernel, scale_factor)
-            st.image(sketch_result, width='stretch', channels="GRAY")
-            
-            # ডাউনলোড বাটন তৈরি (পূর্বের ন্যায়)
-            result_pil = Image.fromarray(sketch_result)
-            buf = io.BytesIO()
-            result_pil.save(buf, format="PNG")
-            byte_im = buf.getvalue()
-            
-            st.download_button(
-                label="📥 Download Sketch",
-                data=byte_im,
-                file_name="pencil_sketch.png",
-                mime="image/png"
-            )
+        if st.button("🚀 Convert via Cloud"):
+            with st.spinner("Processing on Render Cloud Server & Syncing with Supabase..."):
+                try:
+                    # ১. Section 5: Supabase Cloud Storage-এ Original Image সেভ করা
+                    if supabase:
+                        try:
+                            supabase.storage.from_("images").upload(f"inputs/{file_name}", file_bytes, {"x-upsert": "true"})
+                        except Exception as e:
+                            st.warning("Note: Original Image failed to upload to Supabase.")
+
+                    # ২. Section 4: Render Cloud API-তে প্রসেসিং রিকোয়েস্ট পাঠানো (RENDER_API_URL ব্যবহার করা হয়েছে)
+                    files = {"file": (file_name, file_bytes, "image/png")}
+                    response = requests.post(RENDER_API_URL, files=files)
+                    
+                    if response.status_code == 200:
+                        sketch_hex = response.json()["sketch_bytes"]
+                        sketch_bytes = bytes.fromhex(sketch_hex)
+
+                        # ৩. Section 5: Supabase Cloud Storage-এ Output Sketch Image সেভ করা
+                        if supabase:
+                            try:
+                                supabase.storage.from_("images").upload(f"outputs/sketch_{file_name}", sketch_bytes, {"x-upsert": "true"})
+                            except Exception as e:
+                                pass
+
+                        # ৪. আউটপুট স্কেচ ইমেজ ডিসপ্লে করা
+                        st.image(sketch_bytes, use_column_width=True)
+                        
+                        # ডাউনলোড বাটন
+                        st.download_button(
+                            label="📥 Download Sketch",
+                            data=sketch_bytes,
+                            file_name=f"sketch_{file_name}",
+                            mime="image/png"
+                        )
+                        st.success("Successfully Processed!")
+                    else:
+                        st.error("Render Server processing failed. Please check backend logs.")
+                except Exception as e:
+                    st.error(f"Error connecting to backend: {e}")
