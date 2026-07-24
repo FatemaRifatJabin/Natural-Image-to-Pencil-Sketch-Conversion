@@ -2,6 +2,7 @@ import streamlit as st
 from PIL import Image, ExifTags
 import io
 import requests
+import mimetypes  # ডায়নামিক কন্টেন্ট টাইপের জন্য যুক্ত করা হয়েছে
 from supabase import create_client
 
 # ---------------------------------------------------------
@@ -9,7 +10,7 @@ from supabase import create_client
 # ---------------------------------------------------------
 RENDER_API_URL = "https://natural-image-to-pencil-sketch-conversion.onrender.com/convert"
 
-# Supabase Credentials (সঠিক URL এবং Key)
+# Supabase Credentials
 SUPABASE_URL = "https://zkrtqljygfvjlwhxakwq.supabase.co"
 SUPABASE_KEY = "sb_publishable_UpAp9JsR6W3q4NQ2pIpDxg_X7F0XMW3"
 
@@ -78,16 +79,23 @@ def rotate_image_if_needed(image_pil):
 # ---------------------------------------------------------
 # ৫. ফাইল আপলোড ও ডিসপ্লে
 # ---------------------------------------------------------
-uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png", "webp"])
 
 if uploaded_file is not None:
     image = Image.open(uploaded_file)
     image = rotate_image_if_needed(image)
-    
-    img_byte_arr = io.BytesIO()
-    image.save(img_byte_arr, format='PNG')
-    file_bytes = img_byte_arr.getvalue()
     file_name = uploaded_file.name
+
+    # ডায়নামিকভাবে ফাইলের সঠিক Content-Type বের করা
+    content_type, _ = mimetypes.guess_type(file_name)
+    if not content_type:
+        content_type = "image/jpeg"  # Fallback type
+
+    # আপলোডকৃত ফাইলের ফরম্যাট অনুযায়ী মেমরিতে সেভ করা
+    img_byte_arr = io.BytesIO()
+    img_format = image.format if image.format else 'PNG'
+    image.save(img_byte_arr, format=img_format)
+    file_bytes = img_byte_arr.getvalue()
 
     col1, col2 = st.columns(2)
     
@@ -101,17 +109,17 @@ if uploaded_file is not None:
             try:
                 # Supabase Upload (Input Image)
                 if supabase:
-                            try:
-                                supabase.storage.from_("images").upload(
-                                f"inputs/{file_name}", 
-                                file_bytes, 
-                                {"x-upsert": "true", "content-type": "image/png"}
-                                )
-                            except Exception as e:
-                                    pass
+                    try:
+                        supabase.storage.from_("images").upload(
+                            f"inputs/{file_name}", 
+                            file_bytes, 
+                            {"x-upsert": "true", "content-type": content_type}
+                        )
+                    except Exception:
+                        pass
 
                 # API Data Payload
-                files = {"file": (file_name, file_bytes, "image/png")}
+                files = {"file": (file_name, file_bytes, content_type)}
                 data = {
                     "blur_kernel": blur_kernel,
                     "scale_factor": scale_factor,
@@ -128,14 +136,14 @@ if uploaded_file is not None:
 
                     # Supabase Upload (Output Image)
                     if supabase:
-                                try:
-                                    supabase.storage.from_("images").upload(
-                                    f"outputs/sketch_{file_name}", 
-                                    sketch_bytes, 
-                                    {"x-upsert": "true", "content-type": "image/png"}
-                                        )
-                                except Exception as e:
-                                    pass
+                        try:
+                            supabase.storage.from_("images").upload(
+                                f"outputs/sketch_{file_name}", 
+                                sketch_bytes, 
+                                {"x-upsert": "true", "content-type": content_type}
+                            )
+                        except Exception:
+                            pass
 
                     # Display Output Sketch
                     st.image(sketch_bytes, use_container_width=True)
@@ -144,7 +152,7 @@ if uploaded_file is not None:
                         label="📥 Download Sketch",
                         data=sketch_bytes,
                         file_name=f"sketch_{file_name}",
-                        mime="image/png"
+                        mime=content_type
                     )
                 else:
                     st.error("Processing failed at Render API backend.")
